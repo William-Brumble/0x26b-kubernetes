@@ -17,6 +17,22 @@ data:
   minio_console_address: 0.0.0.0:9001
   username: <INSERT-USERNAME>
 ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  namespace: minio-ns
+  annotations:
+    volume.beta.kubernetes.io/storage-provisioner: driver.longhorn.io
+    volume.kubernetes.io/storage-provisioner: driver.longhorn.io
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: longhorn
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
