@@ -1,0 +1,132 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-password-sec
+  namespace: minio-ns
+type: Opaque
+data:
+  password: <BASE64 ENCODED PASSWORD>
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: minio-cm
+  namespace: minio-ns
+data:
+  minio_address: 0.0.0.0:9000
+  minio_console_address: 0.0.0.0:9001
+  username: <INSERT-USERNAME>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio-dep
+  namespace: minio-ns
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      volumes:
+        - name: minio-pvc-storage
+          persistentVolumeClaim:
+            claimName: minio-pvc
+      containers:
+        - name: minio-container
+          image: quay.io/minio/minio
+          args:
+            - server
+            - /data
+          ports:
+            - containerPort: 9000
+              protocol: TCP
+            - containerPort: 9001
+              protocol: TCP
+          env:
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-password-sec
+                  key: password
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: minio-cm
+                  key: username
+            - name: MINIO_ADDRESS
+              valueFrom:
+                configMapKeyRef:
+                  name: minio-cm
+                  key: minio_address
+            - name: MINIO_CONSOLE_ADDRESS
+              valueFrom:
+                configMapKeyRef:
+                  name: minio-cm
+                  key: minio_console_address
+          volumeMounts:
+            - name: minio-pvc-storage
+              mountPath: /data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-srv-clusterip
+  namespace: minio-ns
+spec:
+  selector:
+    app: minio
+  type: ClusterIP
+  ports:
+    - name: console
+      protocol: TCP
+      port: 80
+      targetPort: 9001
+    - name: s3
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-ing
+  namespace: minio-ns
+  annotations:
+    # If you have setup cert manager:
+    # cert-manager.io/issuer: my-ca-issuer
+spec:
+  ingressClassName: nginx
+  # If you have setup cert manager:
+  # tls:
+  #  - hosts:
+  #      - minio-console.<FQDN/HOSTNAME>
+  #      - minio-api.<FQDN/HOSTNAME>
+  #    secretName: <CERT-NAME>
+  rules:
+    - host: <minio-console.FQDN/HOSTNAME>
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio-srv-clusterip
+                port:
+                  number: 80
+    - host: <minio-api.FQDN/HOSTNAME>
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio-srv-clusterip
+                port:
+                  number: 9000

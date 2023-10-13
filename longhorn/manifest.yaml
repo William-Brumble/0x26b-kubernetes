@@ -1,0 +1,80 @@
+# Install using manifest:
+# kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/v1.5.1/deploy/longhorn.yaml
+#
+# after installing with helm see these examples of a pvc and claim
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: volume-test-pvc
+  namespace: volume-test-ns
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volume-test-pod
+  namespace: volume-test-ns
+  labels:
+    app: volume-test-dep
+spec:
+  containers:
+  - name: volume-test
+    image: nginx:stable-alpine
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+    - name: volv
+      mountPath: /data
+    ports:
+    - containerPort: 80
+  volumes:
+  - name: volv
+    persistentVolumeClaim:
+      claimName: volume-test-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: volume-test-srv
+  namespace: volume-test-ns
+spec:
+  type: ClusterIP
+  selector:
+    app: volume-test-dep
+  ports:
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: volume-test-ing
+  namespace: volume-test-ns
+  annotations:
+    # If you have setup cert manager:
+    # cert-manager.io/issuer: my-ca-issuer
+spec:
+  ingressClassName: nginx
+  # If you have setup cert manager:
+  # tls:
+  #  - hosts:
+  #      - <FQDN / HOSTNAME>
+  #    secretName: <CERT-NAME>
+  rules:
+    - host: <FQDN / HOSTNAME>
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: volume-test-srv
+                port:
+                  number: 80
+
